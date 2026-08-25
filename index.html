@@ -165,7 +165,7 @@
 
     .stat-label { font-size: 0.85rem; color: #666; margin-top: 4px; margin-bottom: 12px; }
 
-    /* POPUP / OVERLAY FOR ABRECHNUNG & LOADING */
+    /* POPUP OVERLAY FÜR SYNC & ABRECHNUNG */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -359,12 +359,12 @@
 
   </main>
 
-  <!-- POPUP FÜR POPUP-STATUS UND LADEZEITEN -->
+  <!-- POPUP OVERLAY FÜR LADEZUSTÄNDE -->
   <div id="modalOverlay" class="modal-overlay">
     <div class="modal-card">
       <div class="spinner"></div>
-      <h3 id="modalTitle" style="margin: 0 0 8px 0; font-size: 1.1rem;">Abrechnung wird erstellt...</h3>
-      <p id="modalSub" style="margin: 0; font-size: 0.85rem; color: #666;">Bitte einen Moment gedulden, das PDF wird im Google Drive generiert.</p>
+      <h3 id="modalTitle" style="margin: 0 0 8px 0; font-size: 1.1rem;">Verarbeite...</h3>
+      <p id="modalSub" style="margin: 0; font-size: 0.85rem; color: #666;">Bitte einen Moment gedulden.</p>
     </div>
   </div>
 
@@ -625,8 +625,6 @@
       };
 
       const rows = getPendingRows();
-      
-      // Falls Eintrag für den Monat im Speicher schon existiert -> Ersetzen
       const existingIndex = rows.findIndex(r => r.jahr === row.jahr && r.monat === row.monat);
       if (existingIndex >= 0) {
         rows[existingIndex] = row;
@@ -648,22 +646,26 @@
       switchTab('abrechnung');
     }
 
-    // ANPASSUNG SYNC-BAR ANZEIGE
+    // MANUELLE SYNCHRONISATION MIT OVERLAY
     async function manualSync() {
       const rows = getPendingRows();
       const dot = document.getElementById('statusDot');
       const syncText = document.getElementById('syncText');
       const syncBtn = document.getElementById('syncBtn');
 
-      // Status in der Bar aktualisieren
+      // Status in der Bar
       dot.className = "dot syncing";
       syncText.innerText = "Synchronisation wird durchgeführt...";
       syncBtn.disabled = true;
+
+      // Popup Overlay anzeigen
+      showModal(true, "Synchronisation...", "Monatsdaten werden an Google Sheets übermittelt.");
 
       if (rows.length === 0) {
         await loadSheetData();
         updateUI();
         syncBtn.disabled = false;
+        showModal(false);
         alert("Daten aktualisiert.");
         return true;
       }
@@ -676,6 +678,8 @@
         });
         const data = await res.json();
         
+        showModal(false);
+
         if (data.status === 'success') {
           setPendingRows([]);
           await loadSheetData();
@@ -686,6 +690,7 @@
           alert("Fehler bei Sync: " + data.message);
         }
       } catch (err) {
+        showModal(false);
         alert("Netzwerkfehler.");
       }
       
@@ -710,13 +715,11 @@
       generatePDF();
     }
 
-    // PDF POPUP ANZEIGEN BEIM GENERIEREN
     async function generatePDF() {
       const m = Number(document.getElementById('pdfMonat').value);
       const y = Number(document.getElementById('pdfJahr').value);
       const [zweimonate, korrektur] = document.getElementById('pdfTyp').value.split('_').map(Number);
 
-      // Pop-up Fenster anzeigen
       showModal(true, "Abrechnung wird erstellt...", "Bitte einen Moment gedulden, das PDF wird im Google Drive generiert.");
 
       try {
