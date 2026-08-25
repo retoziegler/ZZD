@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dentis-v9';
+const CACHE_NAME = 'dentis-v10';
 
 const ASSETS = [
   './',
