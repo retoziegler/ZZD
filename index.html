@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ZZ Dental Abrechnung</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --primary: #007aff;
+      --success: #34c759;
+      --warning: #ff9500;
+      --text: #1c1c1e;
+      --border: #e5e5ea;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 16px;
+      padding-bottom: 40px;
+    }
+    h1, h2 { font-size: 1.2rem; margin-top: 0; }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .form-group {
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-sizing: border-box;
+      font-size: 1rem;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    button {
+      width: 100%;
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    button.secondary { background: #8e8e93; }
+    button.success { background: var(--success); }
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      color: white;
+    }
+    .badge-offline { background: var(--warning); }
+    .badge-online { background: var(--success); }
+    .pending-list {
+      font-size: 0.9rem;
+      border-top: 1px solid var(--border);
+      margin-top: 10px;
+      padding-top: 10px;
+    }
+    .loading {
+      display: none;
+      text-align: center;
+      margin: 10px 0;
+      font-weight: bold;
+      color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <h1>ZZ Dental App</h1>
+      <span id="syncBadge" class="badge badge-online">Synchronisiert</span>
+    </div>
+    <button id="btnSync" class="secondary" onclick="manualSync()">↻ Manuell Synchronisieren (<span id="pendingCount">0</span>)</button>
+  </div>
+
+  <!-- NEUE UMSÄTZE ERFASSEN -->
+  <div class="card">
+    <h2>Neue Monatszahlen erfassen</h2>
+    <form id="dataForm" onsubmit="handleSaveRow(event)">
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Jahr</label>
+          <input type="number" id="jahr" required>
+        </div>
+        <div class="form-group">
+          <label>Monat (1-12)</label>
+          <input type="number" id="monat" min="1" max="12" required>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Arbeit (CHF)</label>
+          <input type="number" step="0.01" id="arbeit" value="0">
+        </div>
+        <div class="form-group">
+          <label>Vergünstigung</label>
+          <input type="number" step="0.01" id="verguenstigung" value="0">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Korrektur-Wert</label>
+          <input type="number" step="0.01" id="korrekturWert" value="0">
+        </div>
+        <div class="form-group">
+          <label>Korrektur Text</label>
+          <input type="text" id="korrekturDesc">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label>FIX-Korrektur Wert</label>
+          <input type="number" step="0.01" id="fixKorrekturWert" value="0">
+        </div>
+        <div class="form-group">
+          <label>FIX-Korrektur Text</label>
+          <input type="text" id="fixKorrekturDesc">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Akonto (CHF)</label>
+        <input type="number" step="0.01" id="akonto" value="0">
+      </div>
+
+      <button type="submit">Lokal Speichern (Offline)</button>
+    </form>
+    
+    <div class="pending-list" id="pendingContainer" style="display:none;">
+      <strong>Ungespeicherte Monatszeilen:</strong>
+      <div id="pendingItems"></div>
+    </div>
+  </div>
+
+  <!-- PDF GENERIEREN -->
+  <div class="card">
+    <h2>PDF Abrechnung Erstellen</h2>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Startmonat</label>
+        <input type="number" id="pdfMonat" min="1" max="12">
+      </div>
+      <div class="form-group">
+        <label>Jahr</label>
+        <input type="number" id="pdfJahr">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Abrechnungstyp</label>
+      <select id="pdfTyp">
+        <option value="0_0">1 Monat (normal)</option>
+        <option value="1_0">2 Monate (normal)</option>
+        <option value="0_1">1 Monat (mit Korrektur)</option>
+        <option value="0_2">1 Monat (mit FIX-Korrektur)</option>
+        <option value="0_3">1 Monat (BEIDES)</option>
+      </select>
+    </div>
+
+    <button class="success" onclick="preparePDFGeneration()">PDF Erstellen & Exportieren</button>
+  </div>
+
+  <div id="loading" class="loading">Bitte warten, Daten werden verarbeitet...</div>
+
+  <script>
+    // DEINE GOOGLE APPS SCRIPT WEB APP URL HIER EINFÜGEN:
+    const API_URL = "https://script.google.com/macros/s/AKfycbysywqSl4MiyG1iyzFUvJep1XCmEc4_i-URWB38duCTKGLk3SknDM84luKp3Qyn5y1rXA/exec";
+
+    // Standard-Datumsinitialisierung
+    const d = new Date();
+    document.getElementById('jahr').value = d.getFullYear();
+    document.getElementById('monat').value = d.getMonth() + 1;
+    document.getElementById('pdfJahr').value = d.getFullYear();
+    document.getElementById('pdfMonat').value = d.getMonth() + 1;
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js');
+    }
+
+    function getPendingRows() {
+      return JSON.parse(localStorage.getItem('pending_rows') || '[]');
+    }
+
+    function setPendingRows(rows) {
+      localStorage.setItem('pending_rows', JSON.stringify(rows));
+      updateUI();
+    }
+
+    function updateUI() {
+      const rows = getPendingRows();
+      const count = rows.length;
+      document.getElementById('pendingCount').innerText = count;
+      const badge = document.getElementById('syncBadge');
+      
+      if (count > 0) {
+        badge.innerText = count + " Ausstehend";
+        badge.className = "badge badge-offline";
+        document.getElementById('pendingContainer').style.display = "block";
+        document.getElementById('pendingItems').innerHTML = rows.map(r => `<div>• ${r.monat}/${r.jahr}: CHF ${r.arbeit}</div>`).join('');
+      } else {
+        badge.innerText = "Synchronisiert";
+        badge.className = "badge badge-online";
+        document.getElementById('pendingContainer').style.display = "none";
+      }
+    }
+
+    function handleSaveRow(e) {
+      e.preventDefault();
+      const row = {
+        jahr: Number(document.getElementById('jahr').value),
+        monat: Number(document.getElementById('monat').value),
+        arbeit: Number(document.getElementById('arbeit').value),
+        verguenstigung: Number(document.getElementById('verguenstigung').value),
+        korrekturWert: Number(document.getElementById('korrekturWert').value),
+        korrekturDesc: document.getElementById('korrekturDesc').value,
+        fixKorrekturWert: Number(document.getElementById('fixKorrekturWert').value),
+        fixKorrekturDesc: document.getElementById('fixKorrekturDesc').value,
+        akonto: Number(document.getElementById('akonto').value)
+      };
+
+      const rows = getPendingRows();
+      rows.push(row);
+      setPendingRows(rows);
+      alert("Monatsdaten lokal gespeichert. Vergiss nicht zu synchronisieren!");
+    }
+
+    async function manualSync() {
+      const rows = getPendingRows();
+      if (rows.length === 0) {
+        alert("Keine neuen Daten zum Synchronisieren vorhanden.");
+        return true;
+      }
+
+      showLoading(true);
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Apps Script benötigt text/plain um CORS Preflight zu vermeiden
+          body: JSON.stringify({ action: 'syncData', rows: rows })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+          setPendingRows([]);
+          alert("Synchronisation erfolgreich!");
+          showLoading(false);
+          return true;
+        } else {
+          alert("Fehler bei Sync: " + data.message);
+        }
+      } catch (err) {
+        alert("Netzwerkfehler: Stellen Sie sicher, dass Sie online sind.");
+      }
+      showLoading(false);
+      return false;
+    }
+
+    async function preparePDFGeneration() {
+      const rows = getPendingRows();
+      if (rows.length > 0) {
+        const answer = confirm("Es sind noch ungespeicherte Monatsdaten offline vorhanden. Möchtest du ZUERST synchronisieren?");
+        if (answer) {
+          const synced = await manualSync();
+          if (!synced) {
+            if (!confirm("Sync hat nicht geklappt/wurde abgebrochen. Trotzdem mit alten Daten fortfahren?")) {
+              return;
+            }
+          }
+        }
+      }
+      generatePDF();
+    }
+
+    async function generatePDF() {
+      const m = Number(document.getElementById('pdfMonat').value);
+      const y = Number(document.getElementById('pdfJahr').value);
+      const [zweimonate, korrektur] = document.getElementById('pdfTyp').value.split('_').map(Number);
+
+      showLoading(true);
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'generatePDF',
+            numStartMonth: m,
+            numYear: y,
+            zweimonate: zweimonate,
+            korrektur: korrektur
+          })
+        });
+
+        const data = await res.json();
+        showLoading(false);
+
+        if (data.status === 'success') {
+          sharePDF(data.fileBase64, data.fileName);
+        } else {
+          alert("Fehler bei PDF-Erstellung: " + data.message);
+        }
+      } catch (err) {
+        showLoading(false);
+        alert("Fehler bei der Anfrage: " + err.toString());
+      }
+    }
+
+    // iOS Share-Sheet Funktion zum Teilen/Speichern der PDF-Datei
+    async function sharePDF(base64Data, filename) {
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const file = new File([byteArray], filename, { type: 'application/pdf' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: filename,
+            text: 'Hier ist die generierte Leistungsabrechnung.'
+          });
+        } catch (err) {
+          console.log("Teilen abgebrochen", err);
+        }
+      } else {
+        // Fallback für Browser, die navigator.share nicht unterstützen
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(file);
+        link.download = filename;
+        link.click();
+      }
+    }
+
+    function showLoading(show) {
+      document.getElementById('loading').style.display = show ? 'block' : 'none';
+    }
+
+    // Initialisierung beim Start
+    updateUI();
+  </script>
+</body>
+</html>
