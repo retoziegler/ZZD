@@ -1,6 +1,6 @@
 {
   "name": "ZZ Dental Abrechnung",
-  "short_name": "Abrechnung",
+  "short_name": "ZZ Dental Abrechnung",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f4f6f9",
