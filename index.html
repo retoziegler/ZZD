@@ -140,9 +140,14 @@
 
     .table-responsive { overflow-x: auto; margin-bottom: 8px; }
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left; }
-    th, td { padding: 8px 6px; border-bottom: 0.5px solid var(--border); }
+    th, td { padding: 10px 6px; border-bottom: 0.5px solid var(--border); }
     th { color: #666; font-weight: 600; background: #fafafa; }
+    
+    /* KLICKBARE ZEILEN STYLING */
+    tr.clickable-row { cursor: pointer; -webkit-tap-highlight-color: rgba(0,0,0,0.05); }
+    tr.clickable-row:active { background-color: #f0f0f5; }
     tr.pending-row { background-color: #fff9e6; }
+    tr.pending-row:active { background-color: #fff0c2; }
 
     .form-group { margin-bottom: 10px; }
     label { display: block; font-size: 0.8rem; color: #666; margin-bottom: 3px; }
@@ -165,7 +170,7 @@
 
     .stat-label { font-size: 0.85rem; color: #666; margin-top: 4px; margin-bottom: 12px; }
 
-    /* POPUP OVERLAY FÜR SYNC & ABRECHNUNG */
+    /* POPUP OVERLAY */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -252,7 +257,8 @@
       </div>
 
       <div class="card">
-        <h2 id="yearTitle" style="margin-top:0;">Monatsübersicht</h2>
+        <h2 id="yearTitle" style="margin-top:0; margin-bottom:4px;">Monatsübersicht</h2>
+        <p style="font-size:0.75rem; color:#8e8e93; margin:0 0 10px 0;">Tippe auf einen Monat, um die Daten einzusehen/bearbeiten.</p>
         <div class="table-responsive">
           <table>
             <thead>
@@ -274,7 +280,7 @@
     <!-- ================= TAB 2: UMSATZ EINGEBEN ================= -->
     <div id="tab-eingabe" class="tab-content">
       <div class="card">
-        <h2 style="margin-top:0;">Monat erfassen</h2>
+        <h2 id="formTitle" style="margin-top:0;">Monat erfassen</h2>
         <form id="dataForm" onsubmit="handleSaveRow(event)">
           <div class="grid-2">
             <div class="form-group">
@@ -370,15 +376,15 @@
 
   <!-- TAB BAR -->
   <nav class="tab-bar">
-    <a href="#" class="tab-item active" onclick="switchTab('abrechnung', event)">
+    <a href="#" id="nav-abrechnung" class="tab-item active" onclick="switchTab('abrechnung', event)">
       <span class="tab-icon">📄</span>
       <span>Abrechnung</span>
     </a>
-    <a href="#" class="tab-item" onclick="switchTab('eingabe', event)">
+    <a href="#" id="nav-eingabe" class="tab-item" onclick="switchTab('eingabe', event)">
       <span class="tab-icon">✏️</span>
       <span>Umsatz</span>
     </a>
-    <a href="#" class="tab-item" onclick="switchTab('vergleiche', event)">
+    <a href="#" id="nav-vergleiche" class="tab-item" onclick="switchTab('vergleiche', event)">
       <span class="tab-icon">📊</span>
       <span>Vergleiche</span>
     </a>
@@ -406,9 +412,9 @@
       document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
 
       document.getElementById('tab-' + tabName).classList.add('active');
-      if(event && event.currentTarget) {
-        event.currentTarget.classList.add('active');
-      }
+      
+      const navItem = document.getElementById('nav-' + tabName);
+      if(navItem) navItem.classList.add('active');
 
       if(tabName === 'vergleiche') {
         renderAllCharts();
@@ -512,7 +518,9 @@
         }
 
         const tr = document.createElement('tr');
-        if (isPending) tr.className = 'pending-row';
+        tr.className = 'clickable-row' + (isPending ? ' pending-row' : '');
+        tr.onclick = () => editMonth(m);
+        
         tr.innerHTML = `
           <td><strong>${MONTH_NAMES[m-1]}</strong></td>
           <td>${arbeit}</td>
@@ -521,6 +529,38 @@
         `;
         tbody.appendChild(tr);
       }
+    }
+
+    // EDITIER-FUNKTION FÜR MONATE
+    function editMonth(m) {
+      const pending = getPendingRows();
+      const pendingRow = pending.find(r => r.jahr == currentYear && r.monat == m);
+      const onlineRow = serverData.find(r => r.jahr == currentYear && r.monat == m);
+
+      const targetData = pendingRow || onlineRow || {
+        jahr: currentYear,
+        monat: m,
+        arbeit: 0,
+        verguenstigung: 0,
+        korrekturWert: 0,
+        korrekturDesc: '',
+        fixKorrekturWert: 0,
+        fixKorrekturDesc: '',
+        akonto: 1500
+      };
+
+      document.getElementById('jahr').value = targetData.jahr;
+      document.getElementById('monat').value = targetData.monat;
+      document.getElementById('arbeit').value = targetData.arbeit || 0;
+      document.getElementById('verguenstigung').value = targetData.verguenstigung || 0;
+      document.getElementById('korrekturWert').value = targetData.korrekturWert || 0;
+      document.getElementById('korrekturDesc').value = targetData.korrekturDesc || '';
+      document.getElementById('fixKorrekturWert').value = targetData.fixKorrekturWert || 0;
+      document.getElementById('fixKorrekturDesc').value = targetData.fixKorrekturDesc || '';
+      document.getElementById('akonto').value = targetData.akonto !== undefined ? targetData.akonto : 1500;
+
+      document.getElementById('formTitle').innerText = `${MONTH_NAMES[m-1]} ${currentYear} bearbeiten`;
+      switchTab('eingabe');
     }
 
     function renderAllCharts() {
@@ -642,23 +682,21 @@
       document.getElementById('fixKorrekturDesc').value = '';
       document.getElementById('akonto').value = 1500;
 
+      document.getElementById('formTitle').innerText = "Monat erfassen";
       alert("Monat lokal erfasst / aktualisiert.");
       switchTab('abrechnung');
     }
 
-    // MANUELLE SYNCHRONISATION MIT OVERLAY
     async function manualSync() {
       const rows = getPendingRows();
       const dot = document.getElementById('statusDot');
       const syncText = document.getElementById('syncText');
       const syncBtn = document.getElementById('syncBtn');
 
-      // Status in der Bar
       dot.className = "dot syncing";
       syncText.innerText = "Synchronisation wird durchgeführt...";
       syncBtn.disabled = true;
 
-      // Popup Overlay anzeigen
       showModal(true, "Synchronisation...", "Monatsdaten werden an Google Sheets übermittelt.");
 
       if (rows.length === 0) {
