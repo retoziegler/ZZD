@@ -1,5 +1,4 @@
-// Versions-Nummer hochzählen bei Änderungen
-const CACHE_NAME = 'dentis-v8';
+const CACHE_NAME = 'dentis-v9';
 
 const ASSETS = [
   './',
@@ -9,10 +8,16 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  self.skipWaiting(); // Sofort als aktiver Worker installieren
+  // Warten nicht erzwingen, sondern auf 'SKIP_WAITING' Nachricht vom Frontend warten
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.action === 'skipWaiting') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (e) => {
@@ -25,28 +30,24 @@ self.addEventListener('activate', (e) => {
           }
         })
       );
-    }).then(() => self.clients.claim()) // Übernehme sofort die Kontrolle über alle offenen Fenster
+    }).then(() => self.clients.claim())
   );
 });
 
-// Network-First Strategie: Versuche immer erst den Server zu erreichen
 self.addEventListener('fetch', (e) => {
-  // Nur GET Anfragen cachen, API-POSTs direkt durchlassen
   if (e.request.method !== 'GET') return;
 
   e.respondWith(
-    fetch(e.request)
-      .then((networkResponse) => {
-        // Erfolgreich geladen -> Aktualisiere Cache im Hintergrund
+    caches.match(e.request).then((cachedResponse) => {
+      const fetchPromise = fetch(e.request).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(e.request, responseClone));
         }
         return networkResponse;
-      })
-      .catch(() => {
-        // Offline -> Nimm Daten aus dem Cache
-        return caches.match(e.request);
-      })
+      }).catch(() => cachedResponse);
+
+      return cachedResponse || fetchPromise;
+    })
   );
 });
