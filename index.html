@@ -24,10 +24,9 @@
       --border: #c6c6c8;
       --tab-bg: rgba(249, 249, 249, 0.94);
 
-      /* App Farben für Vergleiche */
       --color-last-year: #00c7be;  /* Türkis */
       --color-this-year: #ff2d55;  /* Hotpink */
-      --color-proj-year: #ffb3c0;  /* Helles Pink für Hochrechnung */
+      --color-proj-year: #ffb3c0;  /* Helles Pink */
     }
 
     body {
@@ -157,28 +156,12 @@
       cursor: pointer; margin-top: 6px;
     }
     button.success { background: var(--success); }
-    button.update-btn { background: #5856d6; color: white; border: none; padding: 8px; width: 100%; font-weight: bold; display: none; }
+    button.update-btn { background: #5856d6; color: white; border: none; padding: 10px; width: 100%; font-weight: bold; display: none; text-align: center; }
 
-    /* CHART CONTAINERS */
-    .chart-box {
-      position: relative;
-      height: 260px;
-      width: 100%;
-    }
+    .chart-box { position: relative; height: 260px; width: 100%; }
+    .chart-box-small { position: relative; height: 160px; width: 100%; }
 
-    .chart-box-small {
-      position: relative;
-      height: 160px;
-      width: 100%;
-    }
-
-    .stat-label {
-      font-size: 0.85rem;
-      color: #666;
-      margin-top: 4px;
-      margin-bottom: 12px;
-    }
-
+    .stat-label { font-size: 0.85rem; color: #666; margin-top: 4px; margin-bottom: 12px; }
     .loading { display: none; text-align: center; margin: 10px 0; font-weight: bold; color: var(--primary); }
   </style>
 </head>
@@ -310,7 +293,6 @@
 
     <!-- ================= TAB 3: VERGLEICHE ================= -->
     <div id="tab-vergleiche" class="tab-content">
-      <!-- 1. MONATSVERGLEICH CHART -->
       <div class="card">
         <h2 style="margin-top:0; margin-bottom:2px;">Monatsvergleich</h2>
         <div class="stat-label">Beteiligung pro Monat</div>
@@ -319,16 +301,14 @@
         </div>
       </div>
 
-      <!-- 2. JAHRESSUMME COMPARISON -->
       <div class="card">
         <h2 style="margin-top:0; margin-bottom:2px;">Gesamtsumme</h2>
-        <div id="sumSubtitle" class="stat-label">Gesamte Beteiligung im Jahresvergleich</div>
+        <div class="stat-label">Gesamte Beteiligung im Jahresvergleich</div>
         <div class="chart-box-small">
           <canvas id="sumChart"></canvas>
         </div>
       </div>
 
-      <!-- 3. DURCHSCHNITT COMPARISON -->
       <div class="card">
         <h2 style="margin-top:0; margin-bottom:2px;">Monatsdurchschnitt</h2>
         <div class="stat-label">Durchschnittliche Beteiligung pro aktiver Monat</div>
@@ -361,12 +341,10 @@
   <script>
     const API_URL = CONFIG.API_URL;
     const MONTH_NAMES = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
-    let serverData = [];
+    let serverData = JSON.parse(localStorage.getItem('cached_server_data') || '[]');
+    let newWorkerPending = null;
     
-    // Charts Instanzen
-    let mainChart = null;
-    let sumChart = null;
-    let avgChart = null;
+    let mainChart = null, sumChart = null, avgChart = null;
 
     const d = new Date();
     const currentYear = d.getFullYear();
@@ -391,21 +369,35 @@
       }
     }
 
+    // SAUBERE UPDATE-ERKENNUNG
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js?v=' + Date.now(), { updateViaCache: 'none' }).then((reg) => {
-        reg.update();
+      navigator.serviceWorker.register('./sw.js').then((reg) => {
         reg.addEventListener('updatefound', () => {
-          const newWorker = reg.installing;
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          newWorkerPending = reg.installing;
+          newWorkerPending.addEventListener('statechange', () => {
+            if (newWorkerPending.state === 'installed' && navigator.serviceWorker.controller) {
               document.getElementById('updateBtn').style.display = 'block';
             }
           });
         });
       });
+
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
     }
 
-    function applyUpdate() { window.location.reload(true); }
+    function applyUpdate() {
+      if (newWorkerPending) {
+        newWorkerPending.postMessage({ action: 'skipWaiting' });
+      } else {
+        window.location.reload();
+      }
+    }
 
     function getPendingRows() {
       return JSON.parse(localStorage.getItem('pending_rows') || '[]');
@@ -441,10 +433,12 @@
         const result = await res.json();
         if (result.status === 'success') {
           serverData = result.data;
+          // Daten lokal im Cache behalten
+          localStorage.setItem('cached_server_data', JSON.stringify(serverData));
           renderTable();
         }
       } catch (err) {
-        console.log("Offline - Serverdaten nicht verfügbar");
+        console.log("Offline - nutze gecachte Serverdaten");
       }
       showLoading(false);
     }
@@ -487,7 +481,6 @@
       }
     }
 
-    // ================= GRAFIKEN GENERIEREN =================
     function renderAllCharts() {
       const lastYear = currentYear - 1;
       const pending = getPendingRows();
@@ -495,14 +488,10 @@
       const dataCurrentYear = [];
       const dataLastYear = [];
 
-      let sumLastYear = 0;
-      let countLastYear = 0;
-
-      let sumCurrentYearReal = 0;
-      let countCurrentYearReal = 0;
+      let sumLastYear = 0, countLastYear = 0;
+      let sumCurrentYearReal = 0, countCurrentYearReal = 0;
 
       for (let m = 1; m <= 12; m++) {
-        // Letztes Jahr (nur aus Sheet)
         const lastRow = serverData.find(r => r.jahr == lastYear && r.monat == m);
         if (lastRow && lastRow.umsatzbeteiligung) {
           const val = Number(lastRow.umsatzbeteiligung);
@@ -513,7 +502,6 @@
           dataLastYear.push(0);
         }
 
-        // Dieses Jahr (Sheet + Offline Pending)
         const pendingRow = pending.find(r => r.jahr == currentYear && r.monat == m);
         const curRow = serverData.find(r => r.jahr == currentYear && r.monat == m);
 
@@ -532,15 +520,11 @@
         }
       }
 
-      // Durchschnitts-Berechnung
       const avgLastYear = countLastYear > 0 ? (sumLastYear / countLastYear) : 0;
       const avgCurrentYear = countCurrentYearReal > 0 ? (sumCurrentYearReal / countCurrentYearReal) : 0;
-
-      // Hochrechnung Gesamtsumme dieses Jahr
       const missingMonths = 12 - countCurrentYearReal;
       const projectedAddition = missingMonths > 0 ? (avgCurrentYear * missingMonths) : 0;
 
-      // 1. HAUPTGRAPH (MONATSVERGLEICH)
       if (mainChart) mainChart.destroy();
       const ctxMain = document.getElementById('comparisonChart').getContext('2d');
       mainChart = new Chart(ctxMain, {
@@ -548,26 +532,13 @@
         data: {
           labels: MONTH_NAMES,
           datasets: [
-            {
-              label: `${lastYear}`,
-              data: dataLastYear,
-              backgroundColor: '#00c7be' // Türkis
-            },
-            {
-              label: `${currentYear}`,
-              data: dataCurrentYear,
-              backgroundColor: '#ff2d55' // Hotpink
-            }
+            { label: `${lastYear}`, data: dataLastYear, backgroundColor: '#00c7be' },
+            { label: `${currentYear}`, data: dataCurrentYear, backgroundColor: '#ff2d55' }
           ]
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: { y: { beginAtZero: true } }
-        }
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
       });
 
-      // 2. GESAMTSUMME CHART (PROGNOSE STACKED)
       if (sumChart) sumChart.destroy();
       const ctxSum = document.getElementById('sumChart').getContext('2d');
       sumChart = new Chart(ctxSum, {
@@ -575,60 +546,25 @@
         data: {
           labels: [`${lastYear}`, `${currentYear}`],
           datasets: [
-            {
-              label: 'Ist-Wert (CHF)',
-              data: [sumLastYear, sumCurrentYearReal],
-              backgroundColor: ['#00c7be', '#ff2d55']
-            },
-            {
-              label: 'Prognose (Hochgerechnet)',
-              data: [0, projectedAddition],
-              backgroundColor: '#ffb3c0' // Helles Pink
-            }
+            { label: 'Ist-Wert (CHF)', data: [sumLastYear, sumCurrentYearReal], backgroundColor: ['#00c7be', '#ff2d55'] },
+            { label: 'Prognose', data: [0, projectedAddition], backgroundColor: '#ffb3c0' }
           ]
         },
         options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            x: { stacked: true, beginAtZero: true },
-            y: { stacked: true }
-          },
-          plugins: {
-            tooltip: {
-              callbacks: {
-                footer: (items) => {
-                  if(items.some(i => i.dataIndex === 1) && missingMonths > 0) {
-                    return `Total inkl. Prognose: CHF ${(sumCurrentYearReal + projectedAddition).toFixed(2)}`;
-                  }
-                }
-              }
-            }
-          }
+          indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+          scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true } }
         }
       });
 
-      // 3. DURCHSCHNITT CHART
       if (avgChart) avgChart.destroy();
       const ctxAvg = document.getElementById('avgChart').getContext('2d');
       avgChart = new Chart(ctxAvg, {
         type: 'bar',
         data: {
           labels: [`${lastYear} (Ø)`, `${currentYear} (Ø)`],
-          datasets: [{
-            label: 'Ø Monat (CHF)',
-            data: [avgLastYear.toFixed(2), avgCurrentYear.toFixed(2)],
-            backgroundColor: ['#00c7be', '#ff2d55']
-          }]
+          datasets: [{ label: 'Ø Monat (CHF)', data: [avgLastYear.toFixed(2), avgCurrentYear.toFixed(2)], backgroundColor: ['#00c7be', '#ff2d55'] }]
         },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: { x: { beginAtZero: true } },
-          plugins: { legend: { display: false } }
-        }
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { beginAtZero: true } }, plugins: { legend: { display: false } } }
       });
     }
 
