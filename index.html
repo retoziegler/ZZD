@@ -31,11 +31,10 @@
       color: var(--text);
       margin: 0;
       padding: 0;
-      padding-top: 75px;  /* Platz für den fixen Header */
-      padding-bottom: 80px; /* Platz für die Tab-Bar */
+      padding-top: 75px;
+      padding-bottom: 80px;
     }
 
-    /* FIXER HEADER OBEN */
     .top-header {
       position: fixed;
       top: 0; left: 0; right: 0;
@@ -103,7 +102,6 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
-    /* TAB BAR UNTEN */
     .tab-bar {
       position: fixed;
       bottom: 0; left: 0; right: 0;
@@ -134,14 +132,12 @@
     .tab-item.active { color: var(--primary); }
     .tab-icon { font-size: 1.3rem; margin-bottom: 2px; }
 
-    /* TABELLEN */
     .table-responsive { overflow-x: auto; margin-bottom: 8px; }
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left; }
     th, td { padding: 8px 6px; border-bottom: 0.5px solid var(--border); }
     th { color: #666; font-weight: 600; background: #fafafa; }
     tr.pending-row { background-color: #fff9e6; }
 
-    /* FORMULARE */
     .form-group { margin-bottom: 10px; }
     label { display: block; font-size: 0.8rem; color: #666; margin-bottom: 3px; }
     input, select {
@@ -158,7 +154,6 @@
     button.success { background: var(--success); }
     button.update-btn { background: #5856d6; color: white; border: none; padding: 8px; width: 100%; font-weight: bold; display: none; }
 
-    /* CHART CONTAINER FIX GEGEN ENDLOSES WACHSEN */
     .chart-box {
       position: relative;
       height: 300px;
@@ -170,7 +165,7 @@
 </head>
 <body>
 
-  <!-- UNIVERSAL TOP HEADER -->
+  <!-- TOP HEADER -->
   <header class="top-header">
     <div class="title-bar">DENTIS</div>
     <div class="sync-bar">
@@ -186,10 +181,9 @@
 
   <main class="container">
 
-    <!-- ================= TAB 1: ABRECHNUNG ERSTELLEN ================= -->
+    <!-- ================= TAB 1: ABRECHNUNG ================= -->
     <div id="tab-abrechnung" class="tab-content active">
       
-      <!-- PDF DEREKT OBEN GENERIEREN -->
       <div class="card">
         <h2 style="margin-top:0;">Abrechnung Erstellen</h2>
         <div class="grid-2">
@@ -217,7 +211,6 @@
         <button class="btn-main success" onclick="preparePDFGeneration()">PDF Erstellen & Öffnen</button>
       </div>
 
-      <!-- MONATSÜBERSICHT TABELLE DARUNTER -->
       <div class="card">
         <h2 id="yearTitle" style="margin-top:0;">Monatsübersicht</h2>
         <div class="table-responsive">
@@ -287,9 +280,10 @@
             </div>
           </div>
 
+          <!-- AKONTO DEFAULT AUF 1500 GESETZT -->
           <div class="form-group">
             <label>Akonto (CHF)</label>
-            <input type="number" step="0.01" id="akonto" value="0">
+            <input type="number" step="0.01" id="akonto" value="1500">
           </div>
 
           <button type="submit" class="btn-main">Lokal Speichern (Offline)</button>
@@ -301,7 +295,6 @@
     <div id="tab-vergleiche" class="tab-content">
       <div class="card">
         <h2 style="margin-top:0;">Umsatzbeteiligung im Vergleich</h2>
-        <!-- Korrigierter Box-Container verhindert Dehnung -->
         <div class="chart-box">
           <canvas id="comparisonChart"></canvas>
         </div>
@@ -357,8 +350,9 @@
       }
     }
 
+    // REGISTRIERUNG MIT CACHE-BYPASS
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').then((reg) => {
+      navigator.serviceWorker.register('./sw.js?v=' + Date.now(), { updateViaCache: 'none' }).then((reg) => {
         reg.update();
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;
@@ -371,7 +365,7 @@
       });
     }
 
-    function applyUpdate() { window.location.reload(); }
+    function applyUpdate() { window.location.reload(true); }
 
     function getPendingRows() {
       return JSON.parse(localStorage.getItem('pending_rows') || '[]');
@@ -403,7 +397,7 @@
     async function loadSheetData() {
       showLoading(true);
       try {
-        const res = await fetch(`${API_URL}?action=getData`);
+        const res = await fetch(`${API_URL}?action=getData&t=` + Date.now());
         const result = await res.json();
         if (result.status === 'success') {
           serverData = result.data;
@@ -453,7 +447,6 @@
       }
     }
 
-    // GEFIXTE CHART-GENERIERUNG
     function renderChart() {
       const ctx = document.getElementById('comparisonChart').getContext('2d');
       const lastYear = currentYear - 1;
@@ -481,12 +474,12 @@
             {
               label: `${currentYear} (CHF)`,
               data: dataCurrentYear,
-              backgroundColor: '#5ac8fa' // Hellblau
+              backgroundColor: '#5ac8fa'
             },
             {
               label: `${lastYear} (CHF)`,
               data: dataLastYear,
-              backgroundColor: '#ff2d55' // Pink
+              backgroundColor: '#ff2d55'
             }
           ]
         },
@@ -517,6 +510,16 @@
       const rows = getPendingRows();
       rows.push(row);
       setPendingRows(rows);
+      
+      // Resette Formular mit Akonto Default 1500
+      document.getElementById('arbeit').value = 0;
+      document.getElementById('verguenstigung').value = 0;
+      document.getElementById('korrekturWert').value = 0;
+      document.getElementById('korrekturDesc').value = '';
+      document.getElementById('fixKorrekturWert').value = 0;
+      document.getElementById('fixKorrekturDesc').value = '';
+      document.getElementById('akonto').value = 1500;
+
       alert("Lokal gespeichert.");
       switchTab('abrechnung');
     }
