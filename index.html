@@ -33,68 +33,35 @@
       margin-bottom: 16px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
-    .form-group {
-      margin-bottom: 12px;
-    }
-    label {
-      display: block;
-      font-size: 0.85rem;
-      color: #666;
-      margin-bottom: 4px;
-    }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-size: 0.85rem; color: #666; margin-bottom: 4px; }
     input, select {
-      width: 100%;
-      padding: 10px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      box-sizing: border-box;
-      font-size: 1rem;
+      width: 100%; padding: 10px; border: 1px solid var(--border);
+      border-radius: 8px; box-sizing: border-box; font-size: 1rem;
     }
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     button {
-      width: 100%;
-      background: var(--primary);
-      color: white;
-      border: none;
-      padding: 12px;
-      border-radius: 8px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 6px;
+      width: 100%; background: var(--primary); color: white; border: none;
+      padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: 600;
+      cursor: pointer; margin-top: 6px;
     }
     button.secondary { background: #8e8e93; }
     button.success { background: var(--success); }
-    .badge {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      font-weight: bold;
-      color: white;
-    }
+    button.update-btn { background: #5856d6; margin-bottom: 12px; display: none; }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; color: white; }
     .badge-offline { background: var(--warning); }
     .badge-online { background: var(--success); }
-    .pending-list {
-      font-size: 0.9rem;
-      border-top: 1px solid var(--border);
-      margin-top: 10px;
-      padding-top: 10px;
-    }
-    .loading {
-      display: none;
-      text-align: center;
-      margin: 10px 0;
-      font-weight: bold;
-      color: var(--primary);
-    }
+    .pending-list { font-size: 0.9rem; border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+    .loading { display: none; text-align: center; margin: 10px 0; font-weight: bold; color: var(--primary); }
   </style>
+
+  <!-- External Config Script -->
+  <script src="./config.js"></script>
 </head>
 <body>
+
+  <!-- UPDATE BANNER -->
+  <button id="updateBtn" class="update-btn" onclick="applyUpdate()">🚀 Neue Version verfügbar! Tippen zum Aktualisieren</button>
 
   <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -197,8 +164,8 @@
   <div id="loading" class="loading">Bitte warten, Daten werden verarbeitet...</div>
 
   <script>
-    // DEINE GOOGLE APPS SCRIPT WEB APP URL HIER EINFÜGEN:
-    const API_URL = "https://script.google.com/macros/s/AKfycbysywqSl4MiyG1iyzFUvJep1XCmEc4_i-URWB38duCTKGLk3SknDM84luKp3Qyn5y1rXA/exec";
+    // Zugreifen auf URL aus config.js
+    const API_URL = CONFIG.API_URL;
 
     // Standard-Datumsinitialisierung
     const d = new Date();
@@ -207,10 +174,29 @@
     document.getElementById('pdfJahr').value = d.getFullYear();
     document.getElementById('pdfMonat').value = d.getMonth() + 1;
 
-    // PWA Service Worker Registration
+    // --- AUTO-UPDATE LOGIK ---
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js');
+      navigator.serviceWorker.register('./sw.js').then((reg) => {
+        // Manuelle Prüfung auf Änderungen auf dem Server bei jedem App-Start
+        reg.update();
+
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // Neue Version gefunden -> Banner anzeigen
+              document.getElementById('updateBtn').style.display = 'block';
+            }
+          });
+        });
+      });
     }
+
+    function applyUpdate() {
+      // Seite neu laden um den neuen Cache zu aktivieren
+      window.location.reload();
+    }
+    // -------------------------
 
     function getPendingRows() {
       return JSON.parse(localStorage.getItem('pending_rows') || '[]');
@@ -270,7 +256,7 @@
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Apps Script benötigt text/plain um CORS Preflight zu vermeiden
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'syncData', rows: rows })
         });
         const data = await res.json();
@@ -339,7 +325,6 @@
       }
     }
 
-    // iOS Share-Sheet Funktion zum Teilen/Speichern der PDF-Datei
     async function sharePDF(base64Data, filename) {
       const byteCharacters = atob(base64Data);
       const byteNumbers = new Array(byteCharacters.length);
@@ -360,7 +345,6 @@
           console.log("Teilen abgebrochen", err);
         }
       } else {
-        // Fallback für Browser, die navigator.share nicht unterstützen
         const link = document.createElement('a');
         link.href = URL.createObjectURL(file);
         link.download = filename;
@@ -372,7 +356,6 @@
       document.getElementById('loading').style.display = show ? 'block' : 'none';
     }
 
-    // Initialisierung beim Start
     updateUI();
   </script>
 </body>
