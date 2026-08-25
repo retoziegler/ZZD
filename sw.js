@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dentis-v11';
+const CACHE_NAME = 'dentis-v12';
 
 const ASSETS = [
   './',
@@ -8,7 +8,6 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  // Warten nicht erzwingen, sondern auf 'SKIP_WAITING' Nachricht vom Frontend warten
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
