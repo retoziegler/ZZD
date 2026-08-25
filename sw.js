@@ -1,5 +1,5 @@
 // ÄNDERE DIESE VERSION, WENN DU EIN UPDATE AUF GITHUB HOCHLÄDST (z.B. v2, v3, v4...)
-const CACHE_NAME = 'zz-dental-v3';
+const CACHE_NAME = 'zz-dental-v4';
 
 const ASSETS = [
   './',
