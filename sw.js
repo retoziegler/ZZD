@@ -1,5 +1,5 @@
-// ÄNDERE DIESE VERSION, WENN DU EIN UPDATE AUF GITHUB HOCHLÄDST (z.B. v2, v3, v4...)
-const CACHE_NAME = 'zz-dental-v5';
+// Versions-Nummer hochzählen bei Änderungen
+const CACHE_NAME = 'dentis-v7';
 
 const ASSETS = [
   './',
@@ -9,15 +9,13 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  // Sofort aktivieren, ohne auf das Schließen alter Tabs zu warten
-  self.skipWaiting();
+  self.skipWaiting(); // Sofort als aktiver Worker installieren
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
 });
 
 self.addEventListener('activate', (e) => {
-  // Alte Cache-Versionen löschen
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
@@ -27,12 +25,28 @@ self.addEventListener('activate', (e) => {
           }
         })
       );
-    }).then(() => self.clients.claim())
+    }).then(() => self.clients.claim()) // Übernehme sofort die Kontrolle über alle offenen Fenster
   );
 });
 
+// Network-First Strategie: Versuche immer erst den Server zu erreichen
 self.addEventListener('fetch', (e) => {
+  // Nur GET Anfragen cachen, API-POSTs direkt durchlassen
+  if (e.request.method !== 'GET') return;
+
   e.respondWith(
-    caches.match(e.request).then((res) => res || fetch(e.request))
+    fetch(e.request)
+      .then((networkResponse) => {
+        // Erfolgreich geladen -> Aktualisiere Cache im Hintergrund
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, responseClone));
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        // Offline -> Nimm Daten aus dem Cache
+        return caches.match(e.request);
+      })
   );
 });
