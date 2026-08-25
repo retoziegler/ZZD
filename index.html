@@ -24,9 +24,9 @@
       --border: #c6c6c8;
       --tab-bg: rgba(249, 249, 249, 0.94);
 
-      --color-last-year: #00c7be;  /* Türkis */
-      --color-this-year: #ff2d55;  /* Hotpink */
-      --color-proj-year: #ffb3c0;  /* Helles Pink */
+      --color-last-year: #00c7be;
+      --color-this-year: #ff2d55;
+      --color-proj-year: #ffb3c0;
     }
 
     body {
@@ -82,6 +82,7 @@
       background: var(--success);
     }
     .dot.has-pending { background: var(--warning); }
+    .dot.syncing { background: var(--primary); }
 
     .sync-btn-mini {
       background: none;
@@ -92,6 +93,7 @@
       padding: 0;
       cursor: pointer;
     }
+    .sync-btn-mini:disabled { color: #8e8e93; }
 
     .container { padding: 16px; }
 
@@ -162,7 +164,44 @@
     .chart-box-small { position: relative; height: 160px; width: 100%; }
 
     .stat-label { font-size: 0.85rem; color: #666; margin-top: 4px; margin-bottom: 12px; }
-    .loading { display: none; text-align: center; margin: 10px 0; font-weight: bold; color: var(--primary); }
+
+    /* POPUP / OVERLAY FOR ABRECHNUNG & LOADING */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 2000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-card {
+      background: var(--card);
+      padding: 24px;
+      border-radius: 16px;
+      width: 80%;
+      max-width: 320px;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    }
+
+    .spinner {
+      margin: 0 auto 16px auto;
+      width: 36px;
+      height: 36px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -175,7 +214,7 @@
         <span id="statusDot" class="dot"></span>
         <span id="syncText">Synchronisiert</span>
       </div>
-      <button class="sync-btn-mini" onclick="manualSync()">↻ Sync</button>
+      <button id="syncBtn" class="sync-btn-mini" onclick="manualSync()">↻ Sync</button>
     </div>
   </header>
 
@@ -320,7 +359,14 @@
 
   </main>
 
-  <div id="loading" class="loading">Bitte warten...</div>
+  <!-- POPUP FÜR POPUP-STATUS UND LADEZEITEN -->
+  <div id="modalOverlay" class="modal-overlay">
+    <div class="modal-card">
+      <div class="spinner"></div>
+      <h3 id="modalTitle" style="margin: 0 0 8px 0; font-size: 1.1rem;">Abrechnung wird erstellt...</h3>
+      <p id="modalSub" style="margin: 0; font-size: 0.85rem; color: #666;">Bitte einen Moment gedulden, das PDF wird im Google Drive generiert.</p>
+    </div>
+  </div>
 
   <!-- TAB BAR -->
   <nav class="tab-bar">
@@ -369,7 +415,6 @@
       }
     }
 
-    // SAUBERE UPDATE-ERKENNUNG
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').then((reg) => {
         reg.addEventListener('updatefound', () => {
@@ -427,20 +472,17 @@
     }
 
     async function loadSheetData() {
-      showLoading(true);
       try {
         const res = await fetch(`${API_URL}?action=getData&t=` + Date.now());
         const result = await res.json();
         if (result.status === 'success') {
           serverData = result.data;
-          // Daten lokal im Cache behalten
           localStorage.setItem('cached_server_data', JSON.stringify(serverData));
           renderTable();
         }
       } catch (err) {
         console.log("Offline - nutze gecachte Serverdaten");
       }
-      showLoading(false);
     }
 
     function renderTable() {
@@ -583,7 +625,15 @@
       };
 
       const rows = getPendingRows();
-      rows.push(row);
+      
+      // Falls Eintrag für den Monat im Speicher schon existiert -> Ersetzen
+      const existingIndex = rows.findIndex(r => r.jahr === row.jahr && r.monat === row.monat);
+      if (existingIndex >= 0) {
+        rows[existingIndex] = row;
+      } else {
+        rows.push(row);
+      }
+
       setPendingRows(rows);
       
       document.getElementById('arbeit').value = 0;
@@ -594,19 +644,30 @@
       document.getElementById('fixKorrekturDesc').value = '';
       document.getElementById('akonto').value = 1500;
 
-      alert("Lokal gespeichert.");
+      alert("Monat lokal erfasst / aktualisiert.");
       switchTab('abrechnung');
     }
 
+    // ANPASSUNG SYNC-BAR ANZEIGE
     async function manualSync() {
       const rows = getPendingRows();
+      const dot = document.getElementById('statusDot');
+      const syncText = document.getElementById('syncText');
+      const syncBtn = document.getElementById('syncBtn');
+
+      // Status in der Bar aktualisieren
+      dot.className = "dot syncing";
+      syncText.innerText = "Synchronisation wird durchgeführt...";
+      syncBtn.disabled = true;
+
       if (rows.length === 0) {
         await loadSheetData();
+        updateUI();
+        syncBtn.disabled = false;
         alert("Daten aktualisiert.");
         return true;
       }
 
-      showLoading(true);
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
@@ -618,8 +679,8 @@
         if (data.status === 'success') {
           setPendingRows([]);
           await loadSheetData();
+          syncBtn.disabled = false;
           alert("Erfolgreich synchronisiert!");
-          showLoading(false);
           return true;
         } else {
           alert("Fehler bei Sync: " + data.message);
@@ -627,7 +688,9 @@
       } catch (err) {
         alert("Netzwerkfehler.");
       }
-      showLoading(false);
+      
+      syncBtn.disabled = false;
+      updateUI();
       return false;
     }
 
@@ -647,12 +710,14 @@
       generatePDF();
     }
 
+    // PDF POPUP ANZEIGEN BEIM GENERIEREN
     async function generatePDF() {
       const m = Number(document.getElementById('pdfMonat').value);
       const y = Number(document.getElementById('pdfJahr').value);
       const [zweimonate, korrektur] = document.getElementById('pdfTyp').value.split('_').map(Number);
 
-      showLoading(true);
+      // Pop-up Fenster anzeigen
+      showModal(true, "Abrechnung wird erstellt...", "Bitte einen Moment gedulden, das PDF wird im Google Drive generiert.");
 
       try {
         const res = await fetch(API_URL, {
@@ -668,7 +733,7 @@
         });
 
         const data = await res.json();
-        showLoading(false);
+        showModal(false);
 
         if (data.status === 'success') {
           window.location.href = data.downloadUrl;
@@ -676,13 +741,20 @@
           alert("Fehler: " + data.message);
         }
       } catch (err) {
-        showLoading(false);
+        showModal(false);
         alert("Anfragefehler: " + err.toString());
       }
     }
 
-    function showLoading(show) {
-      document.getElementById('loading').style.display = show ? 'block' : 'none';
+    function showModal(show, title = "", sub = "") {
+      const modal = document.getElementById('modalOverlay');
+      if (show) {
+        document.getElementById('modalTitle').innerText = title;
+        document.getElementById('modalSub').innerText = sub;
+        modal.style.display = 'flex';
+      } else {
+        modal.style.display = 'none';
+      }
     }
 
     updateUI();
