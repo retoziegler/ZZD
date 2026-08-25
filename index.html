@@ -23,6 +23,11 @@
       --text: #1c1c1e;
       --border: #c6c6c8;
       --tab-bg: rgba(249, 249, 249, 0.94);
+
+      /* App Farben für Vergleiche */
+      --color-last-year: #00c7be;  /* Türkis */
+      --color-this-year: #ff2d55;  /* Hotpink */
+      --color-proj-year: #ffb3c0;  /* Helles Pink für Hochrechnung */
     }
 
     body {
@@ -154,10 +159,24 @@
     button.success { background: var(--success); }
     button.update-btn { background: #5856d6; color: white; border: none; padding: 8px; width: 100%; font-weight: bold; display: none; }
 
+    /* CHART CONTAINERS */
     .chart-box {
       position: relative;
-      height: 300px;
+      height: 260px;
       width: 100%;
+    }
+
+    .chart-box-small {
+      position: relative;
+      height: 160px;
+      width: 100%;
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      color: #666;
+      margin-top: 4px;
+      margin-bottom: 12px;
     }
 
     .loading { display: none; text-align: center; margin: 10px 0; font-weight: bold; color: var(--primary); }
@@ -183,7 +202,6 @@
 
     <!-- ================= TAB 1: ABRECHNUNG ================= -->
     <div id="tab-abrechnung" class="tab-content active">
-      
       <div class="card">
         <h2 style="margin-top:0;">Abrechnung Erstellen</h2>
         <div class="grid-2">
@@ -280,7 +298,6 @@
             </div>
           </div>
 
-          <!-- AKONTO DEFAULT AUF 1500 GESETZT -->
           <div class="form-group">
             <label>Akonto (CHF)</label>
             <input type="number" step="0.01" id="akonto" value="1500">
@@ -293,10 +310,30 @@
 
     <!-- ================= TAB 3: VERGLEICHE ================= -->
     <div id="tab-vergleiche" class="tab-content">
+      <!-- 1. MONATSVERGLEICH CHART -->
       <div class="card">
-        <h2 style="margin-top:0;">Umsatzbeteiligung im Vergleich</h2>
+        <h2 style="margin-top:0; margin-bottom:2px;">Monatsvergleich</h2>
+        <div class="stat-label">Beteiligung pro Monat</div>
         <div class="chart-box">
           <canvas id="comparisonChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 2. JAHRESSUMME COMPARISON -->
+      <div class="card">
+        <h2 style="margin-top:0; margin-bottom:2px;">Gesamtsumme</h2>
+        <div id="sumSubtitle" class="stat-label">Gesamte Beteiligung im Jahresvergleich</div>
+        <div class="chart-box-small">
+          <canvas id="sumChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 3. DURCHSCHNITT COMPARISON -->
+      <div class="card">
+        <h2 style="margin-top:0; margin-bottom:2px;">Monatsdurchschnitt</h2>
+        <div class="stat-label">Durchschnittliche Beteiligung pro aktiver Monat</div>
+        <div class="chart-box-small">
+          <canvas id="avgChart"></canvas>
         </div>
       </div>
     </div>
@@ -325,7 +362,11 @@
     const API_URL = CONFIG.API_URL;
     const MONTH_NAMES = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
     let serverData = [];
-    let myChart = null;
+    
+    // Charts Instanzen
+    let mainChart = null;
+    let sumChart = null;
+    let avgChart = null;
 
     const d = new Date();
     const currentYear = d.getFullYear();
@@ -346,11 +387,10 @@
       }
 
       if(tabName === 'vergleiche') {
-        renderChart();
+        renderAllCharts();
       }
     }
 
-    // REGISTRIERUNG MIT CACHE-BYPASS
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js?v=' + Date.now(), { updateViaCache: 'none' }).then((reg) => {
         reg.update();
@@ -447,48 +487,147 @@
       }
     }
 
-    function renderChart() {
-      const ctx = document.getElementById('comparisonChart').getContext('2d');
+    // ================= GRAFIKEN GENERIEREN =================
+    function renderAllCharts() {
       const lastYear = currentYear - 1;
+      const pending = getPendingRows();
 
       const dataCurrentYear = [];
       const dataLastYear = [];
 
+      let sumLastYear = 0;
+      let countLastYear = 0;
+
+      let sumCurrentYearReal = 0;
+      let countCurrentYearReal = 0;
+
       for (let m = 1; m <= 12; m++) {
-        const curRow = serverData.find(r => r.jahr == currentYear && r.monat == m);
+        // Letztes Jahr (nur aus Sheet)
         const lastRow = serverData.find(r => r.jahr == lastYear && r.monat == m);
+        if (lastRow && lastRow.umsatzbeteiligung) {
+          const val = Number(lastRow.umsatzbeteiligung);
+          dataLastYear.push(val);
+          sumLastYear += val;
+          countLastYear++;
+        } else {
+          dataLastYear.push(0);
+        }
 
-        dataCurrentYear.push(curRow ? curRow.umsatzbeteiligung : 0);
-        dataLastYear.push(lastRow ? lastRow.umsatzbeteiligung : 0);
+        // Dieses Jahr (Sheet + Offline Pending)
+        const pendingRow = pending.find(r => r.jahr == currentYear && r.monat == m);
+        const curRow = serverData.find(r => r.jahr == currentYear && r.monat == m);
+
+        if (pendingRow) {
+          const calc = (pendingRow.arbeit - pendingRow.verguenstigung + pendingRow.korrekturWert) * 0.34 - pendingRow.fixKorrekturWert;
+          dataCurrentYear.push(calc);
+          sumCurrentYearReal += calc;
+          countCurrentYearReal++;
+        } else if (curRow && curRow.umsatzbeteiligung) {
+          const val = Number(curRow.umsatzbeteiligung);
+          dataCurrentYear.push(val);
+          sumCurrentYearReal += val;
+          countCurrentYearReal++;
+        } else {
+          dataCurrentYear.push(0);
+        }
       }
 
-      if (myChart) {
-        myChart.destroy();
-      }
+      // Durchschnitts-Berechnung
+      const avgLastYear = countLastYear > 0 ? (sumLastYear / countLastYear) : 0;
+      const avgCurrentYear = countCurrentYearReal > 0 ? (sumCurrentYearReal / countCurrentYearReal) : 0;
 
-      myChart = new Chart(ctx, {
+      // Hochrechnung Gesamtsumme dieses Jahr
+      const missingMonths = 12 - countCurrentYearReal;
+      const projectedAddition = missingMonths > 0 ? (avgCurrentYear * missingMonths) : 0;
+
+      // 1. HAUPTGRAPH (MONATSVERGLEICH)
+      if (mainChart) mainChart.destroy();
+      const ctxMain = document.getElementById('comparisonChart').getContext('2d');
+      mainChart = new Chart(ctxMain, {
         type: 'bar',
         data: {
           labels: MONTH_NAMES,
           datasets: [
             {
-              label: `${currentYear} (CHF)`,
-              data: dataCurrentYear,
-              backgroundColor: '#5ac8fa'
+              label: `${lastYear}`,
+              data: dataLastYear,
+              backgroundColor: '#00c7be' // Türkis
             },
             {
-              label: `${lastYear} (CHF)`,
-              data: dataLastYear,
-              backgroundColor: '#ff2d55'
+              label: `${currentYear}`,
+              data: dataCurrentYear,
+              backgroundColor: '#ff2d55' // Hotpink
             }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+
+      // 2. GESAMTSUMME CHART (PROGNOSE STACKED)
+      if (sumChart) sumChart.destroy();
+      const ctxSum = document.getElementById('sumChart').getContext('2d');
+      sumChart = new Chart(ctxSum, {
+        type: 'bar',
+        data: {
+          labels: [`${lastYear}`, `${currentYear}`],
+          datasets: [
+            {
+              label: 'Ist-Wert (CHF)',
+              data: [sumLastYear, sumCurrentYearReal],
+              backgroundColor: ['#00c7be', '#ff2d55']
+            },
+            {
+              label: 'Prognose (Hochgerechnet)',
+              data: [0, projectedAddition],
+              backgroundColor: '#ffb3c0' // Helles Pink
+            }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
           scales: {
-            y: { beginAtZero: true }
+            x: { stacked: true, beginAtZero: true },
+            y: { stacked: true }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                footer: (items) => {
+                  if(items.some(i => i.dataIndex === 1) && missingMonths > 0) {
+                    return `Total inkl. Prognose: CHF ${(sumCurrentYearReal + projectedAddition).toFixed(2)}`;
+                  }
+                }
+              }
+            }
           }
+        }
+      });
+
+      // 3. DURCHSCHNITT CHART
+      if (avgChart) avgChart.destroy();
+      const ctxAvg = document.getElementById('avgChart').getContext('2d');
+      avgChart = new Chart(ctxAvg, {
+        type: 'bar',
+        data: {
+          labels: [`${lastYear} (Ø)`, `${currentYear} (Ø)`],
+          datasets: [{
+            label: 'Ø Monat (CHF)',
+            data: [avgLastYear.toFixed(2), avgCurrentYear.toFixed(2)],
+            backgroundColor: ['#00c7be', '#ff2d55']
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: { x: { beginAtZero: true } },
+          plugins: { legend: { display: false } }
         }
       });
     }
@@ -511,7 +650,6 @@
       rows.push(row);
       setPendingRows(rows);
       
-      // Resette Formular mit Akonto Default 1500
       document.getElementById('arbeit').value = 0;
       document.getElementById('verguenstigung').value = 0;
       document.getElementById('korrekturWert').value = 0;
