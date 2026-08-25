@@ -2,37 +2,95 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ZZ Dental Abrechnung</title>
   <link rel="manifest" href="manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <style>
     :root {
-      --bg: #f4f6f9;
+      --bg: #f2f2f7;
       --card: #ffffff;
       --primary: #007aff;
       --success: #34c759;
       --warning: #ff9500;
       --text: #1c1c1e;
-      --border: #e5e5ea;
+      --border: #c6c6c8;
+      --tab-bg: rgba(249, 249, 249, 0.94);
     }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background-color: var(--bg);
       color: var(--text);
       margin: 0;
       padding: 16px;
-      padding-bottom: 40px;
+      padding-bottom: 90px;
     }
-    h1, h2 { font-size: 1.2rem; margin-top: 0; }
+
+    h1 { font-size: 1.2rem; margin: 0 0 12px 0; }
+    h2 { font-size: 1.05rem; margin: 0 0 12px 0; }
+
     .card {
       background: var(--card);
       border-radius: 12px;
       padding: 16px;
       margin-bottom: 16px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .tab-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 65px;
+      background: var(--tab-bg);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-top: 0.5px solid var(--border);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding-bottom: env(safe-area-inset-bottom);
+      z-index: 1000;
+    }
+
+    .tab-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #8e8e93;
+      text-decoration: none;
+      font-size: 0.72rem;
+      font-weight: 500;
+      position: relative;
+    }
+
+    .tab-item.active { color: var(--primary); }
+    .tab-icon { font-size: 1.4rem; margin-bottom: 2px; }
+
+    .badge-dot {
+      position: absolute;
+      top: 4px; right: 28%;
+      background: var(--warning);
+      color: white;
+      font-size: 0.65rem;
+      font-weight: bold;
+      border-radius: 10px;
+      padding: 2px 6px;
+      display: none;
+    }
+
+    .table-responsive { overflow-x: auto; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left; }
+    th, td { padding: 10px 8px; border-bottom: 0.5px solid var(--border); }
+    th { color: #666; font-weight: 600; background: #fafafa; }
+    tr.pending-row { background-color: #fff9e6; }
+
     .form-group { margin-bottom: 12px; }
     label { display: block; font-size: 0.85rem; color: #666; margin-bottom: 4px; }
     input, select {
@@ -40,6 +98,7 @@
       border-radius: 8px; box-sizing: border-box; font-size: 1rem;
     }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
     button {
       width: 100%; background: var(--primary); color: white; border: none;
       padding: 12px; border-radius: 8px; font-size: 1rem; font-weight: 600;
@@ -48,14 +107,12 @@
     button.secondary { background: #8e8e93; }
     button.success { background: var(--success); }
     button.update-btn { background: #5856d6; margin-bottom: 12px; display: none; }
-    .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; color: white; }
-    .badge-offline { background: var(--warning); }
-    .badge-online { background: var(--success); }
-    .pending-list { font-size: 0.9rem; border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+    button.small { padding: 6px 10px; font-size: 0.8rem; margin: 0; width: auto; }
+
+    .status-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
     .loading { display: none; text-align: center; margin: 10px 0; font-weight: bold; color: var(--primary); }
   </style>
 
-  <!-- External Config Script -->
   <script src="./config.js"></script>
 </head>
 <body>
@@ -63,128 +120,188 @@
   <!-- UPDATE BANNER -->
   <button id="updateBtn" class="update-btn" onclick="applyUpdate()">🚀 Neue Version verfügbar! Tippen zum Aktualisieren</button>
 
-  <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <h1>ZZ Dental App</h1>
-      <span id="syncBadge" class="badge badge-online">Synchronisiert</span>
-    </div>
-    <button id="btnSync" class="secondary" onclick="manualSync()">↻ Manuell Synchronisieren (<span id="pendingCount">0</span>)</button>
-  </div>
+  <!-- ================= TAB 1: ABRECHNUNG ERSTELLEN ================= -->
+  <div id="tab-abrechnung" class="tab-content active">
+    <div class="card">
+      <div class="status-bar">
+        <h1 id="yearTitle">Monatsübersicht</h1>
+        <button class="small secondary" onclick="loadSheetData()">↻ Laden</button>
+      </div>
 
-  <!-- NEUE UMSÄTZE ERFASSEN -->
-  <div class="card">
-    <h2>Neue Monatszahlen erfassen</h2>
-    <form id="dataForm" onsubmit="handleSaveRow(event)">
+      <div id="pendingAlert" style="display:none; background:#fff3cd; color:#856404; padding:8px 12px; border-radius:6px; font-size:0.85rem; margin-bottom:12px;">
+        ⚠️ Ungespeicherte Daten offline vorhanden.
+      </div>
+
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Monat</th>
+              <th>Arbeit</th>
+              <th>Beteiligung</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="monthsTableBody">
+            <tr><td colspan="4" style="text-align:center;">Lade Daten...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>PDF Abrechnung generieren</h2>
       <div class="grid-2">
+        <div class="form-group">
+          <label>Startmonat</label>
+          <input type="number" id="pdfMonat" min="1" max="12">
+        </div>
         <div class="form-group">
           <label>Jahr</label>
-          <input type="number" id="jahr" required>
-        </div>
-        <div class="form-group">
-          <label>Monat (1-12)</label>
-          <input type="number" id="monat" min="1" max="12" required>
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="form-group">
-          <label>Arbeit (CHF)</label>
-          <input type="number" step="0.01" id="arbeit" value="0">
-        </div>
-        <div class="form-group">
-          <label>Vergünstigung</label>
-          <input type="number" step="0.01" id="verguenstigung" value="0">
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="form-group">
-          <label>Korrektur-Wert</label>
-          <input type="number" step="0.01" id="korrekturWert" value="0">
-        </div>
-        <div class="form-group">
-          <label>Korrektur Text</label>
-          <input type="text" id="korrekturDesc">
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="form-group">
-          <label>FIX-Korrektur Wert</label>
-          <input type="number" step="0.01" id="fixKorrekturWert" value="0">
-        </div>
-        <div class="form-group">
-          <label>FIX-Korrektur Text</label>
-          <input type="text" id="fixKorrekturDesc">
+          <input type="number" id="pdfJahr">
         </div>
       </div>
 
       <div class="form-group">
-        <label>Akonto (CHF)</label>
-        <input type="number" step="0.01" id="akonto" value="0">
+        <label>Abrechnungstyp</label>
+        <select id="pdfTyp">
+          <option value="0_0">1 Monat (normal)</option>
+          <option value="1_0">2 Monate (normal)</option>
+          <option value="0_1">1 Monat (mit Korrektur)</option>
+          <option value="0_2">1 Monat (mit FIX-Korrektur)</option>
+          <option value="0_3">1 Monat (BEIDES)</option>
+        </select>
       </div>
 
-      <button type="submit">Lokal Speichern (Offline)</button>
-    </form>
-    
-    <div class="pending-list" id="pendingContainer" style="display:none;">
-      <strong>Ungespeicherte Monatszeilen:</strong>
-      <div id="pendingItems"></div>
+      <button class="success" onclick="preparePDFGeneration()">PDF Erstellen & Exportieren</button>
     </div>
   </div>
 
-  <!-- PDF GENERIEREN -->
-  <div class="card">
-    <h2>PDF Abrechnung Erstellen</h2>
-    <div class="grid-2">
-      <div class="form-group">
-        <label>Startmonat</label>
-        <input type="number" id="pdfMonat" min="1" max="12">
-      </div>
-      <div class="form-group">
-        <label>Jahr</label>
-        <input type="number" id="pdfJahr">
-      </div>
+  <!-- ================= TAB 2: MONATSUMSATZ EINGEBEN ================= -->
+  <div id="tab-eingabe" class="tab-content">
+    <div class="card">
+      <h2>Neuen Monat erfassen</h2>
+      <form id="dataForm" onsubmit="handleSaveRow(event)">
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Jahr</label>
+            <input type="number" id="jahr" required>
+          </div>
+          <div class="form-group">
+            <label>Monat (1-12)</label>
+            <input type="number" id="monat" min="1" max="12" required>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Arbeit (CHF)</label>
+            <input type="number" step="0.01" id="arbeit" value="0">
+          </div>
+          <div class="form-group">
+            <label>Vergünstigung</label>
+            <input type="number" step="0.01" id="verguenstigung" value="0">
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Korrektur-Wert</label>
+            <input type="number" step="0.01" id="korrekturWert" value="0">
+          </div>
+          <div class="form-group">
+            <label>Korrektur Text</label>
+            <input type="text" id="korrekturDesc">
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>FIX-Korrektur Wert</label>
+            <input type="number" step="0.01" id="fixKorrekturWert" value="0">
+          </div>
+          <div class="form-group">
+            <label>FIX-Korrektur Text</label>
+            <input type="text" id="fixKorrekturDesc">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Akonto (CHF)</label>
+          <input type="number" step="0.01" id="akonto" value="0">
+        </div>
+
+        <button type="submit">Lokal Speichern (Offline)</button>
+      </form>
     </div>
 
-    <div class="form-group">
-      <label>Abrechnungstyp</label>
-      <select id="pdfTyp">
-        <option value="0_0">1 Monat (normal)</option>
-        <option value="1_0">2 Monate (normal)</option>
-        <option value="0_1">1 Monat (mit Korrektur)</option>
-        <option value="0_2">1 Monat (mit FIX-Korrektur)</option>
-        <option value="0_3">1 Monat (BEIDES)</option>
-      </select>
+    <div class="card">
+      <h2>Synchronisation</h2>
+      <button class="secondary" onclick="manualSync()">↻ Manuell Synchronisieren (<span id="pendingCount">0</span>)</button>
     </div>
-
-    <button class="success" onclick="preparePDFGeneration()">PDF Erstellen & Exportieren</button>
   </div>
 
-  <div id="loading" class="loading">Bitte warten, Daten werden verarbeitet...</div>
+  <!-- ================= TAB 3: VERGLEICHE ================= -->
+  <div id="tab-vergleiche" class="tab-content">
+    <div class="card" style="text-align: center; padding: 40px 16px;">
+      <span style="font-size: 2.5rem;">📊</span>
+      <h2>Vergleiche</h2>
+      <p style="color: #666; font-size: 0.9rem;">Dieser Bereich steht in einer zukünftigen Version zur Verfügung.</p>
+    </div>
+  </div>
+
+  <div id="loading" class="loading">Bitte warten...</div>
+
+  <!-- ================= UNTERE TAB-BAR ================= -->
+  <nav class="tab-bar">
+    <a href="#" class="tab-item active" onclick="switchTab('abrechnung', event)">
+      <span class="tab-icon">📄</span>
+      <span>Abrechnung</span>
+      <span id="tabBadge" class="badge-dot">!</span>
+    </a>
+    <a href="#" class="tab-item" onclick="switchTab('eingabe', event)">
+      <span class="tab-icon">✏️</span>
+      <span>Umsatz</span>
+    </a>
+    <a href="#" class="tab-item" onclick="switchTab('vergleiche', event)">
+      <span class="tab-icon">📊</span>
+      <span>Vergleiche</span>
+    </a>
+  </nav>
 
   <script>
-    // Zugreifen auf URL aus config.js
     const API_URL = CONFIG.API_URL;
+    const MONTH_NAMES = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+    let serverData = [];
 
-    // Standard-Datumsinitialisierung
+    // Datumsinitialisierung
     const d = new Date();
-    document.getElementById('jahr').value = d.getFullYear();
+    const currentYear = d.getFullYear();
+    document.getElementById('jahr').value = currentYear;
     document.getElementById('monat').value = d.getMonth() + 1;
-    document.getElementById('pdfJahr').value = d.getFullYear();
+    document.getElementById('pdfJahr').value = currentYear;
     document.getElementById('pdfMonat').value = d.getMonth() + 1;
+    document.getElementById('yearTitle').innerText = "Monate " + currentYear;
 
-    // --- AUTO-UPDATE LOGIK ---
+    function switchTab(tabName, event) {
+      if(event) event.preventDefault();
+      
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+
+      document.getElementById('tab-' + tabName).classList.add('active');
+      if(event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
+      }
+    }
+
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').then((reg) => {
-        // Manuelle Prüfung auf Änderungen auf dem Server bei jedem App-Start
         reg.update();
-
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // Neue Version gefunden -> Banner anzeigen
               document.getElementById('updateBtn').style.display = 'block';
             }
           });
@@ -192,11 +309,7 @@
       });
     }
 
-    function applyUpdate() {
-      // Seite neu laden um den neuen Cache zu aktivieren
-      window.location.reload();
-    }
-    // -------------------------
+    function applyUpdate() { window.location.reload(); }
 
     function getPendingRows() {
       return JSON.parse(localStorage.getItem('pending_rows') || '[]');
@@ -208,20 +321,74 @@
     }
 
     function updateUI() {
-      const rows = getPendingRows();
-      const count = rows.length;
+      const pending = getPendingRows();
+      const count = pending.length;
       document.getElementById('pendingCount').innerText = count;
-      const badge = document.getElementById('syncBadge');
       
+      const badge = document.getElementById('tabBadge');
+      const alertBox = document.getElementById('pendingAlert');
+
       if (count > 0) {
-        badge.innerText = count + " Ausstehend";
-        badge.className = "badge badge-offline";
-        document.getElementById('pendingContainer').style.display = "block";
-        document.getElementById('pendingItems').innerHTML = rows.map(r => `<div>• ${r.monat}/${r.jahr}: CHF ${r.arbeit}</div>`).join('');
+        badge.style.display = 'block';
+        alertBox.style.display = 'block';
       } else {
-        badge.innerText = "Synchronisiert";
-        badge.className = "badge badge-online";
-        document.getElementById('pendingContainer').style.display = "none";
+        badge.style.display = 'none';
+        alertBox.style.display = 'none';
+      }
+
+      renderTable();
+    }
+
+    async function loadSheetData() {
+      showLoading(true);
+      try {
+        const res = await fetch(`${API_URL}?action=getData`);
+        const result = await res.json();
+        if (result.status === 'success') {
+          serverData = result.data;
+          renderTable();
+        }
+      } catch (err) {
+        console.log("Serverdaten konnten offline nicht geladen werden.");
+      }
+      showLoading(false);
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('monthsTableBody');
+      const pending = getPendingRows();
+      tbody.innerHTML = '';
+
+      for (let m = 1; m <= 12; m++) {
+        const onlineRow = serverData.find(r => r.jahr == currentYear && r.monat == m);
+        const pendingRow = pending.find(r => r.jahr == currentYear && r.monat == m);
+
+        let arbeit = "-";
+        let beteiligung = "-";
+        let status = "<span style='color:#8e8e93;'>Offen</span>";
+        let isPending = false;
+
+        if (pendingRow) {
+          isPending = true;
+          arbeit = Number(pendingRow.arbeit).toFixed(2);
+          const calc = (pendingRow.arbeit - pendingRow.verguenstigung + pendingRow.korrekturWert) * 0.34 - pendingRow.fixKorrekturWert;
+          beteiligung = calc.toFixed(2);
+          status = "<span style='color:var(--warning);font-weight:bold;'>Pending</span>";
+        } else if (onlineRow) {
+          arbeit = Number(onlineRow.arbeit).toFixed(2);
+          beteiligung = Number(onlineRow.umsatzbeteiligung).toFixed(2);
+          status = "<span style='color:var(--success);font-weight:bold;'>✓ Sheet</span>";
+        }
+
+        const tr = document.createElement('tr');
+        if (isPending) tr.className = 'pending-row';
+        tr.innerHTML = `
+          <td><strong>${MONTH_NAMES[m-1]}</strong></td>
+          <td>${arbeit}</td>
+          <td>${beteiligung}</td>
+          <td>${status}</td>
+        `;
+        tbody.appendChild(tr);
       }
     }
 
@@ -242,13 +409,14 @@
       const rows = getPendingRows();
       rows.push(row);
       setPendingRows(rows);
-      alert("Monatsdaten lokal gespeichert. Vergiss nicht zu synchronisieren!");
+      alert("Monatsdaten offline gespeichert.");
+      switchTab('abrechnung');
     }
 
     async function manualSync() {
       const rows = getPendingRows();
       if (rows.length === 0) {
-        alert("Keine neuen Daten zum Synchronisieren vorhanden.");
+        alert("Keine ausstehenden Daten vorhanden.");
         return true;
       }
 
@@ -263,6 +431,7 @@
         
         if (data.status === 'success') {
           setPendingRows([]);
+          await loadSheetData();
           alert("Synchronisation erfolgreich!");
           showLoading(false);
           return true;
@@ -270,25 +439,34 @@
           alert("Fehler bei Sync: " + data.message);
         }
       } catch (err) {
-        alert("Netzwerkfehler: Stellen Sie sicher, dass Sie online sind.");
+        alert("Netzwerkfehler: Bitte Internetverbindung prüfen.");
       }
       showLoading(false);
       return false;
     }
 
+    // Nachfrage vor PDF-Erzeugung
     async function preparePDFGeneration() {
-      const rows = getPendingRows();
-      if (rows.length > 0) {
-        const answer = confirm("Es sind noch ungespeicherte Monatsdaten offline vorhanden. Möchtest du ZUERST synchronisieren?");
-        if (answer) {
+      const pending = getPendingRows();
+      
+      let msg = "Möchtest du vor dem Erstellen der Abrechnung zuerst den aktuellen Stand synchronisieren / abfragen?";
+      if (pending.length > 0) {
+        msg = "Es gibt ungespeicherte Daten auf dem iPhone! Möchtest du zuerst synchronisieren, um auch eventuelle Änderungen aus dem Sheet-Browser zu laden?";
+      }
+
+      const answer = confirm(msg);
+      
+      if (answer) {
+        if (pending.length > 0) {
           const synced = await manualSync();
-          if (!synced) {
-            if (!confirm("Sync hat nicht geklappt/wurde abgebrochen. Trotzdem mit alten Daten fortfahren?")) {
-              return;
-            }
+          if (!synced && !confirm("Sync fehlgeschlagen. Trotzdem fortfahren?")) {
+            return;
           }
+        } else {
+          await loadSheetData();
         }
       }
+
       generatePDF();
     }
 
@@ -298,6 +476,7 @@
       const [zweimonate, korrektur] = document.getElementById('pdfTyp').value.split('_').map(Number);
 
       showLoading(true);
+
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
@@ -315,7 +494,8 @@
         showLoading(false);
 
         if (data.status === 'success') {
-          sharePDF(data.fileBase64, data.fileName);
+          // Öffnet die generierte Datei auf dem iPhone zum Teilen/Herunterladen
+          window.location.href = data.downloadUrl;
         } else {
           alert("Fehler bei PDF-Erstellung: " + data.message);
         }
@@ -325,38 +505,12 @@
       }
     }
 
-    async function sharePDF(base64Data, filename) {
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const file = new File([byteArray], filename, { type: 'application/pdf' });
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: filename,
-            text: 'Hier ist die generierte Leistungsabrechnung.'
-          });
-        } catch (err) {
-          console.log("Teilen abgebrochen", err);
-        }
-      } else {
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(file);
-        link.download = filename;
-        link.click();
-      }
-    }
-
     function showLoading(show) {
       document.getElementById('loading').style.display = show ? 'block' : 'none';
     }
 
     updateUI();
+    loadSheetData();
   </script>
 </body>
 </html>
