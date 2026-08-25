@@ -1,5 +1,5 @@
 // Versions-Nummer hochzählen bei Änderungen
-const CACHE_NAME = 'dentis-v7';
+const CACHE_NAME = 'dentis-v8';
 
 const ASSETS = [
   './',
