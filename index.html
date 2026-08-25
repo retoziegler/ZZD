@@ -31,7 +31,7 @@
       color: var(--text);
       margin: 0;
       padding: 0;
-      padding-top: 85px;  /* Platz für den fixen Header */
+      padding-top: 75px;  /* Platz für den fixen Header */
       padding-bottom: 80px; /* Platz für die Tab-Bar */
     }
 
@@ -46,7 +46,7 @@
     }
 
     .title-bar {
-      height: 40px;
+      height: 38px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -56,7 +56,7 @@
     }
 
     .sync-bar {
-      height: 26px;
+      height: 24px;
       background: #fafafa;
       display: flex;
       align-items: center;
@@ -135,7 +135,7 @@
     .tab-icon { font-size: 1.3rem; margin-bottom: 2px; }
 
     /* TABELLEN */
-    .table-responsive { overflow-x: auto; margin-bottom: 12px; }
+    .table-responsive { overflow-x: auto; margin-bottom: 8px; }
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left; }
     th, td { padding: 8px 6px; border-bottom: 0.5px solid var(--border); }
     th { color: #666; font-weight: 600; background: #fafafa; }
@@ -158,6 +158,13 @@
     button.success { background: var(--success); }
     button.update-btn { background: #5856d6; color: white; border: none; padding: 8px; width: 100%; font-weight: bold; display: none; }
 
+    /* CHART CONTAINER FIX GEGEN ENDLOSES WACHSEN */
+    .chart-box {
+      position: relative;
+      height: 300px;
+      width: 100%;
+    }
+
     .loading { display: none; text-align: center; margin: 10px 0; font-weight: bold; color: var(--primary); }
   </style>
 </head>
@@ -179,29 +186,12 @@
 
   <main class="container">
 
-    <!-- ================= TAB 1: ABRECHNUNG ================= -->
+    <!-- ================= TAB 1: ABRECHNUNG ERSTELLEN ================= -->
     <div id="tab-abrechnung" class="tab-content active">
+      
+      <!-- PDF DEREKT OBEN GENERIEREN -->
       <div class="card">
-        <h2 id="yearTitle" style="margin-top:0;">Monatsübersicht</h2>
-        <div class="table-responsive">
-          <table>
-            <thead>
-              <tr>
-                <th>Monat</th>
-                <th>Arbeit</th>
-                <th>Beteil.</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="monthsTableBody">
-              <tr><td colspan="4" style="text-align:center;">Lade Daten...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>PDF Generieren</h2>
+        <h2 style="margin-top:0;">Abrechnung Erstellen</h2>
         <div class="grid-2">
           <div class="form-group">
             <label>Startmonat</label>
@@ -225,6 +215,26 @@
         </div>
 
         <button class="btn-main success" onclick="preparePDFGeneration()">PDF Erstellen & Öffnen</button>
+      </div>
+
+      <!-- MONATSÜBERSICHT TABELLE DARUNTER -->
+      <div class="card">
+        <h2 id="yearTitle" style="margin-top:0;">Monatsübersicht</h2>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>Monat</th>
+                <th>Arbeit</th>
+                <th>Beteil.</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="monthsTableBody">
+              <tr><td colspan="4" style="text-align:center;">Lade Daten...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -291,7 +301,10 @@
     <div id="tab-vergleiche" class="tab-content">
       <div class="card">
         <h2 style="margin-top:0;">Umsatzbeteiligung im Vergleich</h2>
-        <canvas id="comparisonChart" style="width:100%; height:280px;"></canvas>
+        <!-- Korrigierter Box-Container verhindert Dehnung -->
+        <div class="chart-box">
+          <canvas id="comparisonChart"></canvas>
+        </div>
       </div>
     </div>
 
@@ -440,7 +453,7 @@
       }
     }
 
-    // DIAGRAMM ERSTELLEN (Dieses Jahr vs. Letztes Jahr)
+    // GEFIXTE CHART-GENERIERUNG
     function renderChart() {
       const ctx = document.getElementById('comparisonChart').getContext('2d');
       const lastYear = currentYear - 1;
@@ -456,7 +469,9 @@
         dataLastYear.push(lastRow ? lastRow.umsatzbeteiligung : 0);
       }
 
-      if (myChart) myChart.destroy();
+      if (myChart) {
+        myChart.destroy();
+      }
 
       myChart = new Chart(ctx, {
         type: 'bar',
