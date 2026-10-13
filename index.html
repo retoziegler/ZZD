@@ -9,7 +9,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#ff2d55">
 
-  <!-- Chart.js für Vergleiche -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="./config.js"></script>
 
@@ -36,19 +35,17 @@
       color: var(--text);
       margin: 0;
       padding: 0;
-      /* DYNAMISCHER ABSTAND OBEN: Berücksichtigt Notch/Dynamic Island + Header-Höhe */
       padding-top: calc(env(safe-area-inset-top) + 70px);
       padding-bottom: calc(env(safe-area-inset-bottom) + 75px);
     }
 
-    /* TOP HEADER MIT SAFE-AREA ANPASSUNG */
     .top-header {
       position: fixed;
       top: 0; left: 0; right: 0;
       background: var(--card);
       border-bottom: 0.5px solid var(--border);
       z-index: 1000;
-      padding-top: env(safe-area-inset-top); /* Schiebt Inhalt unter die Notch */
+      padding-top: env(safe-area-inset-top);
     }
 
     .title-bar {
@@ -58,7 +55,7 @@
       justify-content: center;
       font-weight: 800;
       font-size: 1.1rem;
-      color: var(--color-this-year); /* Hotpink */
+      color: var(--color-this-year);
       border-bottom: 0.5px solid #f0f0f0;
       letter-spacing: -0.2px;
     }
@@ -184,7 +181,6 @@
 
     .stat-label { font-size: 0.85rem; color: #666; margin-top: 4px; margin-bottom: 12px; }
 
-    /* MODAL OVERLAY */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -225,7 +221,7 @@
 </head>
 <body>
 
-  <!-- TOP HEADER MET ZZ DENTAL ABRECHNUNG IN HOTPINK -->
+  <!-- TOP HEADER -->
   <header class="top-header">
     <div class="title-bar">ZZ Dental Abrechnung</div>
     <div class="sync-bar">
@@ -262,6 +258,7 @@
             <option value="0_0">1 Monat (normal)</option>
             <option value="1_0">2 Monate (normal)</option>
             <option value="0_1">1 Monat (mit Korrektur)</option>
+            <option value="1_1">2 Monate (mit Korrektur)</option> <!-- NEUE OPTION -->
             <option value="0_2">1 Monat (mit FIX-Korrektur)</option>
             <option value="0_3">1 Monat (BEIDES)</option>
           </select>
@@ -379,7 +376,6 @@
 
   </main>
 
-  <!-- POPUP OVERLAY FOR OVERLAYS -->
   <div id="modalOverlay" class="modal-overlay">
     <div class="modal-card">
       <div class="spinner"></div>
